@@ -1,0 +1,38 @@
+# /etc/arch-unattended/config
+# Config for arch-unattended-update. Sourced by bash. Shell syntax.
+
+# Packages that ALWAYS require manual inspection. If any pending update
+# matches, the WHOLE upgrade is held (Arch does not support partial
+# upgrades) and you are notified. Bash glob patterns (case-sensitive),
+# matched against package names from `checkupdates`.
+BLACKLIST=(
+    linux
+    linux-lts
+    linux-zen
+    nvidia
+    nvidia-*
+    grub
+    systemd
+    glibc
+    mesa
+)
+
+# Run `arch-audit` (if installed) and tag CVE-affected packages in the
+# notification. 1 = on, 0 = off.
+AUDIT=1
+
+# Check Arch news via `informant` (if installed) and hold the upgrade
+# until news is read. 1 = on, 0 = off.
+CHECK_NEWS=1
+
+# Reboot policy after kernel/systemd/critical library updates.
+#   notify = notify only, never reboot (default, safest)
+#   never  = do nothing
+# Auto-reboot is intentionally not offered for unattended runs.
+REBOOT_POLICY=notify
+
+# Extra pacman args for the upgrade (rarely needed).
+PACMAN_ARGS=()
+
+# Packages whose update means "reboot recommended".
+REBOOT_TRIGGERS=(linux linux-lts linux-zen systemd glibc)

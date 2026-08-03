@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+# arch-unattended-update — gated unattended full-system upgrade for Arch Linux.
+#
+# Model: Arch does NOT support partial upgrades, so this either runs a full
+# `pacman -Syu` (when every gate passes) or holds the entire transaction and
+# notifies you for manual review. Never a partial upgrade.
+#
+# Gates (any trip => hold + notify):
+#   * unread Arch news       (informant)
+#   * blacklisted package    (config BLACKLIST)
+#
+# Snapshots are expected to be handled by snap-pac (alpm pre/post hooks), so
+# this script does not manage snapper directly.
+#
+# Usage: arch-unattended-update [--dry-run] [-h|--help]
+#   --dry-run  evaluate gates and report what WOULD happen; no upgrade,
+#              no state write, no notification.
+set -euo pipefail
+
+DRY_RUN=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|-n) DRY_RUN=1 ;;
+        -h|--help)
+            cat <<'EOF'
+Usage: arch-unattended-update [--dry-run] [-h|--help]
+
+  --dry-run, -n   Evaluate gates and report what WOULD happen. No upgrade,
+                  no state write, no notification. Runs without root.
+  -h, --help      This help.
+EOF
+            exit 0 ;;
+        *) echo "unknown arg: $arg" >&2; exit 2 ;;
+    esac
+done
+
+CONFIG="${AUU_CONFIG:-/etc/arch-unattended/config}"
+STATE_DIR="/var/lib/arch-unattended"
+STATE_FILE="${STATE_DIR}/status.json"
+SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+NOTIFY="${SELF_DIR}/auu-notify"
+LOG_TAG=arch-unattended
+
+# ---- defaults (overridden by config) --------------------------------------
+BLACKLIST=()
+REBOOT_TRIGGERS=(linux linux-lts linux-zen systemd glibc)
+PACMAN_ARGS=()
+AUDIT=1
+CHECK_NEWS=1
+REBOOT_POLICY=notify
+
+log()    { logger -t "$LOG_TAG" -- "$*"; echo "[$LOG_TAG] $*"; }
+notify() {
+    if [[ "$DRY_RUN" -eq 1 ]]; then log "[dry-run] would notify: $*"; return 0; fi
+    [[ -x "$NOTIFY" ]] && "$NOTIFY" "$@" || log "notify: $*"
+}
+
+have()   { command -v "$1" >/dev/null 2>&1; }
+
+# JSON-escape a string.
+json_str() {
+    local s=${1//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    printf '"%s"' "$s"
+}
+
+write_status() {
+    # write_status <state> <held_reason> <count> <pkgs-newline-list>
+    if [[ "$DRY_RUN" -eq 1 ]]; then log "[dry-run] would set state: $1${2:+ ($2)}"; return 0; fi
+    mkdir -p "$STATE_DIR"
+    {
+        printf '{\n'
+        printf '  "state": %s,\n'   "$(json_str "$1")"
+        printf '  "reason": %s,\n'  "$(json_str "$2")"
+        printf '  "count": %s,\n'   "$3"
+        printf '  "packages": %s,\n' "$(json_str "$4")"
+        printf '  "timestamp": %s\n' "$(json_str "$(date -Iseconds)")"
+        printf '}\n'
+    } > "$STATE_FILE"
+}
+
+[[ $EUID -eq 0 || "$DRY_RUN" -eq 1 ]] || { echo "must run as root" >&2; exit 1; }
+# shellcheck source=/dev/null
+[[ -r "$CONFIG" ]] && source "$CONFIG"
+
+# ---- 1. pending updates ---------------------------------------------------
+have checkupdates || { log "checkupdates missing (install pacman-contrib)"; exit 1; }
+
+# checkupdates: exit 0 = updates, 2 = none, other = error. Guard `set -e`.
+pending=""
+set +e
+pending="$(checkupdates 2>/dev/null)"
+cu_rc=$?
+set -e
+case "$cu_rc" in
+    0) ;;
+    2) log "no pending updates"; write_status "up-to-date" "" 0 ""; exit 0 ;;
+    *) log "checkupdates failed (rc=$cu_rc)"; exit 1 ;;
+esac
+
+# names only
+mapfile -t pending_pkgs < <(awk '{print $1}' <<<"$pending")
+count=${#pending_pkgs[@]}
+[[ $count -eq 0 ]] && { write_status "up-to-date" "" 0 ""; exit 0; }
+log "$count pending update(s)"
+
+# ---- 2. security tagging (arch-audit) -------------------------------------
+sec_note=""
+if [[ "$AUDIT" -eq 1 ]] && have arch-audit; then
+    set +e
+    vuln="$(arch-audit -uq 2>/dev/null)"
+    set -e
+    if [[ -n "$vuln" ]]; then
+        vuln_count=$(wc -l <<<"$vuln")
+        sec_note=" (${vuln_count} with known CVE)"
+        log "arch-audit: ${vuln_count} vulnerable package(s) pending"
+    fi
+fi
+
+# ---- 3. GATE A: Arch news (informant) -------------------------------------
+if [[ "$CHECK_NEWS" -eq 1 ]] && have informant; then
+    set +e
+    informant check >/dev/null 2>&1
+    news_rc=$?
+    set -e
+    if [[ $news_rc -ne 0 ]]; then
+        log "HOLD: unread Arch news"
+        write_status "held" "unread Arch news — read with: informant read" \
+            "$count" "$(printf '%s\n' "${pending_pkgs[@]}")"
+        notify critical "Updates held: unread Arch news" \
+            "${count} update(s) pending${sec_note}. Read news then upgrade manually: informant read && pacman -Syu"
+        exit 0
+    fi
+fi
+
+# ---- 4. GATE B: blacklist -------------------------------------------------
+held=()
+for pkg in "${pending_pkgs[@]}"; do
+    for pat in "${BLACKLIST[@]}"; do
+        # shellcheck disable=SC2053
+        if [[ "$pkg" == $pat ]]; then
+            held+=("$pkg")
+            break
+        fi
+    done
+done
+
+if [[ ${#held[@]} -gt 0 ]]; then
+    held_list="${held[*]}"
+    log "HOLD: blacklisted package(s): $held_list"
+    write_status "held" "blacklisted: $held_list" \
+        "$count" "$(printf '%s\n' "${pending_pkgs[@]}")"
+    notify critical "Updates held for manual review" \
+        "Blacklisted: ${held_list}. ${count} total pending${sec_note}. Review then: pacman -Syu"
+    exit 0
+fi
+
+# ---- 5. upgrade -----------------------------------------------------------
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "[dry-run] gates clear — WOULD run: pacman -Syu --noconfirm ${PACMAN_ARGS[*]}"
+    log "[dry-run] ${count} package(s) would be upgraded${sec_note}"
+    printf '%s\n' "${pending_pkgs[@]}" | sed 's/^/  /'
+    exit 0
+fi
+
+log "gates clear — running full upgrade"
+set +e
+pacman -Syu --noconfirm "${PACMAN_ARGS[@]}"
+up_rc=$?
+set -e
+if [[ $up_rc -ne 0 ]]; then
+    log "upgrade FAILED (rc=$up_rc) — snapshot available via snapper if rollback needed"
+    write_status "failed" "pacman exit $up_rc" \
+        "$count" "$(printf '%s\n' "${pending_pkgs[@]}")"
+    notify critical "Unattended upgrade FAILED" \
+        "pacman exited ${up_rc}. Check: journalctl -t ${LOG_TAG}. Rollback: snapper rollback"
+    exit "$up_rc"
+fi
+log "upgrade OK"
+
+# ---- 6. post: .pacnew -----------------------------------------------------
+mapfile -t pacnew < <(find /etc -name '*.pacnew' 2>/dev/null)
+pacnew_note=""
+if [[ ${#pacnew[@]} -gt 0 ]]; then
+    pacnew_note=" ${#pacnew[@]} .pacnew file(s) need merging."
+    log ".pacnew files present: ${pacnew[*]}"
+fi
+
+# ---- 7. post: reboot recommendation ---------------------------------------
+reboot_note=""
+if [[ "$REBOOT_POLICY" != never ]]; then
+    for pkg in "${pending_pkgs[@]}"; do
+        for trig in "${REBOOT_TRIGGERS[@]}"; do
+            if [[ "$pkg" == "$trig" ]]; then
+                reboot_note=" Reboot recommended (${pkg} updated)."
+                break 2
+            fi
+        done
+    done
+fi
+[[ -n "$reboot_note" ]] && log "reboot recommended"
+
+# ---- 8. status + notify ---------------------------------------------------
+write_status "upgraded" "" "$count" "$(printf '%s\n' "${pending_pkgs[@]}")"
+
+summary="Upgraded ${count} package(s)"
+[[ -n "$sec_note" ]] && summary="${summary}${sec_note}"
+body="Done.${reboot_note}${pacnew_note}"
+urgency=normal
+[[ -n "$reboot_note" || -n "$pacnew_note" ]] && urgency=critical
+notify "$urgency" "$summary" "$body"
+log "run complete"

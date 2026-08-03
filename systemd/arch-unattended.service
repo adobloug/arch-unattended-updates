@@ -1,0 +1,14 @@
+[Unit]
+Description=Arch unattended gated system upgrade
+Documentation=man:pacman(8)
+# Only run online; avoid mid-boot contention.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/arch-unattended-update
+Nice=10
+IOSchedulingClass=idle
+# Give the upgrade room; abort if wedged.
+TimeoutStartSec=1800

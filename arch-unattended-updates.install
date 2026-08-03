@@ -1,0 +1,24 @@
+post_install() {
+    install -d /var/lib/arch-unattended
+    cat <<'EOF'
+
+==> arch-unattended-updates installed.
+
+    1. Edit the blacklist:   /etc/arch-unattended/config
+    2. Test (no changes):    arch-unattended-update --dry-run
+    3. Enable daily timer:   systemctl enable --now arch-unattended.timer
+
+    Recommended for rollback safety: configure snapper for / and install
+    snap-pac (automatic pre/post snapshots around every pacman transaction).
+
+    Optional: arch-audit (CVE tags), informant (Arch-news gate, AUR).
+EOF
+}
+
+post_upgrade() {
+    install -d /var/lib/arch-unattended
+}
+
+post_remove() {
+    echo "==> /var/lib/arch-unattended and /etc/arch-unattended left in place; remove manually if unwanted."
+}

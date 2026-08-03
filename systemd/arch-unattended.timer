@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily Arch unattended gated upgrade
+Documentation=man:pacman(8)
+
+[Timer]
+# Daily; Persistent catches missed runs (laptop was off).
+OnCalendar=daily
+Persistent=true
+# Spread load / avoid predictable mirror hits.
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

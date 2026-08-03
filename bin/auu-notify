@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# auu-notify — send a desktop notification to every active graphical user.
+#
+# Runs as root (from the system service) but delivers notify-send into each
+# logged-in user's session bus. Usage:
+#   auu-notify <urgency> <summary> [body]
+# urgency: low | normal | critical
+set -euo pipefail
+
+urgency="${1:-normal}"
+summary="${2:-arch-unattended}"
+body="${3:-}"
+
+sent=0
+
+# Enumerate sessions; pick graphical (x11/wayland) ones that are active.
+while read -r sid; do
+    [[ -n "$sid" ]] || continue
+
+    # loginctl show-session gives Type, State, Name (user), User (uid)
+    eval "$(loginctl show-session "$sid" \
+        -p Type -p State -p Name -p User 2>/dev/null \
+        | sed 's/^/S_/')" || continue
+
+    case "${S_Type:-}" in
+        x11|wayland) ;;
+        *) continue ;;
+    esac
+
+    uid="${S_User:-}"
+    user="${S_Name:-}"
+    [[ -n "$uid" && -n "$user" ]] || continue
+
+    bus="/run/user/${uid}/bus"
+    [[ -S "$bus" ]] || continue
+
+    icon=dialog-information
+    [[ "$urgency" == critical ]] && icon=dialog-warning
+
+    sudo -u "$user" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}" \
+        notify-send \
+            --app-name="Arch Unattended Updates" \
+            --urgency="$urgency" \
+            --icon="$icon" \
+            -- "$summary" "$body" 2>/dev/null && sent=1 || true
+
+done < <(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}')
+
+# Fall back to a log line if nobody was notified (headless run, etc.)
+if [[ "$sent" -eq 0 ]]; then
+    logger -t arch-unattended -- "notify (no graphical session): ${summary} — ${body}"
+fi
