@@ -1,4 +1,4 @@
-# Maintainer: Andreas Dobloug <andreas.dobloug@usit.uio.no>
+# Maintainer: Andreas Dobloug <adobloug@gmail.com>
 #
 # Local build:   makepkg -si         (run from this repo root)
 #
@@ -10,7 +10,7 @@ pkgver=0.1.0
 pkgrel=1
 pkgdesc="Gated unattended full-system upgrades for Arch (checkupdates + gates + notify)"
 arch=('any')
-url="https://example.com/arch-unattended-updates"  # TODO: real URL
+url="https://github.com/adobloug/arch-unattended-updates"
 license=('MIT')
 depends=('pacman-contrib' 'libnotify' 'systemd')
 optdepends=(
