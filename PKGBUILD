@@ -21,9 +21,7 @@ optdepends=(
 backup=('etc/arch-unattended/config')
 install="${pkgname}.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-# TODO(v0.1.1): after pushing the v0.1.1 tag, run `updpkgsums` to pin the real
-# digest, then `makepkg --printsrcinfo > .SRCINFO`. 'SKIP' MUST NOT ship to AUR.
-sha256sums=('SKIP')
+sha256sums=('780243b070a648355550169242fe79194412e422e760c5027bba6515e96db901')
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"

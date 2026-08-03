@@ -15,6 +15,6 @@ pkgbase = arch-unattended-updates
 	optdepends = informant: gate upgrades on unread Arch news
 	backup = etc/arch-unattended/config
 	source = arch-unattended-updates-0.1.1.tar.gz::https://github.com/adobloug/arch-unattended-updates/archive/refs/tags/v0.1.1.tar.gz
-	sha256sums = SKIP
+	sha256sums = 780243b070a648355550169242fe79194412e422e760c5027bba6515e96db901
 
 pkgname = arch-unattended-updates
