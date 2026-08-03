@@ -10,5 +10,6 @@ Type=oneshot
 ExecStart=/usr/bin/arch-unattended-update
 Nice=10
 IOSchedulingClass=idle
-# Give the upgrade room; abort if wedged.
-TimeoutStartSec=1800
+# No timeout: a SIGTERM mid-`pacman -Syu` can interrupt the transaction.
+# Let a large upgrade on a slow mirror finish rather than risk a kill.
+TimeoutStartSec=0

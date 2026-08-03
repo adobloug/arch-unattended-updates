@@ -1,9 +1,8 @@
 # Maintainer: Andreas Dobloug <adobloug@gmail.com>
 #
-# Local build:   makepkg -si         (run from this repo root)
-#
-# For AUR upload: replace the package()-from-$startdir copy with a real
-# source=() tarball/git line (see the commented example below), then:
+# Build from a release tarball:
+#   makepkg -si
+# Regenerate .SRCINFO after any change:
 #   makepkg --printsrcinfo > .SRCINFO
 pkgname=arch-unattended-updates
 pkgver=0.1.0
@@ -21,32 +20,28 @@ optdepends=(
 )
 backup=('etc/arch-unattended/config')
 install="${pkgname}.install"
-
-# --- AUR source example (uncomment + drop the $startdir copy in package) ----
-# source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-# sha256sums=('SKIP')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # replaced with real digest once the v0.1.0 tag exists
 
 package() {
-    # Local packaging: files come straight from the repo (this dir).
-    # $startdir is the directory containing this PKGBUILD.
-    local src="$startdir"
+    cd "$srcdir/$pkgname-$pkgver"
 
-    install -Dm755 "$src/bin/arch-unattended-update" \
+    install -Dm755 bin/arch-unattended-update \
         "$pkgdir/usr/bin/arch-unattended-update"
-    install -Dm755 "$src/bin/auu-notify" \
+    install -Dm755 bin/auu-notify \
         "$pkgdir/usr/bin/auu-notify"
 
-    install -Dm644 "$src/etc/arch-unattended/config" \
+    install -Dm644 etc/arch-unattended/config \
         "$pkgdir/etc/arch-unattended/config"
 
-    install -Dm644 "$src/systemd/arch-unattended.service" \
+    install -Dm644 systemd/arch-unattended.service \
         "$pkgdir/usr/lib/systemd/system/arch-unattended.service"
-    install -Dm644 "$src/systemd/arch-unattended.timer" \
+    install -Dm644 systemd/arch-unattended.timer \
         "$pkgdir/usr/lib/systemd/system/arch-unattended.timer"
 
-    install -Dm644 "$src/README.md" \
+    install -Dm644 README.md \
         "$pkgdir/usr/share/doc/$pkgname/README.md"
 
-    install -Dm644 "$src/LICENSE" \
+    install -Dm644 LICENSE \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

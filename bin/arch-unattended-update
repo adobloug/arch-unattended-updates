@@ -84,6 +84,17 @@ write_status() {
 # shellcheck source=/dev/null
 [[ -r "$CONFIG" ]] && source "$CONFIG"
 
+# ---- 0. pacman lock -------------------------------------------------------
+# If a transaction is already in progress (manual upgrade, another hook),
+# skip cleanly instead of failing the run on db.lck. Only meaningful for a
+# real upgrade run; a dry-run touches nothing.
+PACMAN_LOCK="${PACMAN_LOCK:-/var/lib/pacman/db.lck}"
+if [[ "$DRY_RUN" -eq 0 && -e "$PACMAN_LOCK" ]]; then
+    log "pacman is locked ($PACMAN_LOCK) — another transaction in progress; skipping"
+    write_status "skipped" "pacman locked" 0 ""
+    exit 0
+fi
+
 # ---- 1. pending updates ---------------------------------------------------
 have checkupdates || { log "checkupdates missing (install pacman-contrib)"; exit 1; }
 

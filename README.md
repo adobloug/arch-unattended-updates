@@ -34,16 +34,21 @@ manually, inspecting the flagged package yourself.
 
 ### A. As a pacman package (recommended)
 
+From the AUR:
+
 ```sh
-makepkg -si            # from repo root; builds + installs via pacman
+yay -S arch-unattended-updates      # or your AUR helper of choice
+```
+
+Or build the release tarball directly:
+
+```sh
+makepkg -si            # from repo root; PKGBUILD fetches the v0.1.0 tarball
 ```
 
 Installs to `/usr/bin`, unit to `/usr/lib/systemd/system`, config to
 `/etc/arch-unattended/config` (tracked as a pacman `backup` — your edits are
 preserved across upgrades, new defaults land as `.pacnew`).
-
-For AUR upload: set a real `url`/`source` in `PKGBUILD`, then
-`makepkg --printsrcinfo > .SRCINFO` and push.
 
 ### B. Manual (no package)
 
