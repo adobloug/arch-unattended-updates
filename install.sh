@@ -52,6 +52,6 @@ systemctl daemon-reload
 echo
 echo "Installed. Next:"
 echo "  1. edit blacklist:   \$EDITOR $CFG/config"
-echo "  2. dry-run once:     arch-unattended-update"
+echo "  2. dry-run once:     arch-unattended-update --dry-run"
 echo "  3. enable timer:     systemctl enable --now arch-unattended.timer"
 echo "  4. check schedule:   systemctl list-timers arch-unattended.timer"

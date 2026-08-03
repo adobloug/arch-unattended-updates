@@ -43,7 +43,7 @@ yay -S arch-unattended-updates      # or your AUR helper of choice
 Or build the release tarball directly:
 
 ```sh
-makepkg -si            # from repo root; PKGBUILD fetches the v0.1.0 tarball
+makepkg -si            # from repo root; PKGBUILD fetches the tagged release tarball
 ```
 
 Installs to `/usr/bin`, unit to `/usr/lib/systemd/system`, config to

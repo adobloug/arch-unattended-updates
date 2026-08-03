@@ -51,8 +51,10 @@ while read -r sid; do
     icon=dialog-information
     [[ "$urgency" == critical ]] && icon=dialog-warning
 
-    sudo -u "$user" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}" \
+    # runuser (util-linux, always in base) drops to the target user. sudo is
+    # NOT guaranteed on Arch — base ships neither sudo nor doas.
+    runuser -u "$user" -- \
+        env DBUS_SESSION_BUS_ADDRESS="unix:path=${bus}" \
         notify-send \
             --app-name="Arch Unattended Updates" \
             --urgency="$urgency" \
