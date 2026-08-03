@@ -1,0 +1,20 @@
+pkgbase = arch-unattended-updates
+	pkgdesc = Gated unattended full-system upgrades for Arch (checkupdates + gates + notify)
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/adobloug/arch-unattended-updates
+	install = arch-unattended-updates.install
+	arch = any
+	license = MIT
+	depends = pacman-contrib
+	depends = libnotify
+	depends = systemd
+	optdepends = snapper: btrfs snapshots for rollback
+	optdepends = snap-pac: automatic pre/post pacman snapshots (recommended)
+	optdepends = arch-audit: tag CVE-affected packages in notifications
+	optdepends = informant: gate upgrades on unread Arch news
+	backup = etc/arch-unattended/config
+	source = arch-unattended-updates-0.1.0.tar.gz::https://github.com/adobloug/arch-unattended-updates/archive/refs/tags/v0.1.0.tar.gz
+	sha256sums = b3aa0e2e7820e070c2b2d23bcc4492cfa3ac2a102905a7f0c17a74e2e90712a8
+
+pkgname = arch-unattended-updates

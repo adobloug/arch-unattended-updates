@@ -21,7 +21,7 @@ optdepends=(
 backup=('etc/arch-unattended/config')
 install="${pkgname}.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')  # replaced with real digest once the v0.1.0 tag exists
+sha256sums=('b3aa0e2e7820e070c2b2d23bcc4492cfa3ac2a102905a7f0c17a74e2e90712a8')
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
