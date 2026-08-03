@@ -20,7 +20,7 @@ the only safe automatic action is a full `pacman -Syu`.
 
 This tool provides that, with guardrails suited to a rolling release.
 
-**AUR is out of scope.** automatically building unreviewed PKGBUILDs is not not
+**AUR is out of scope.** Automatically building unreviewed PKGBUILDs is not
 safe to automate, so AUR packages stay manual (`yay -Syu` yourself).
 
 ## What it does
