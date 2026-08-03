@@ -52,7 +52,11 @@ REBOOT_POLICY=notify
 log()    { logger -t "$LOG_TAG" -- "$*"; echo "[$LOG_TAG] $*"; }
 notify() {
     if [[ "$DRY_RUN" -eq 1 ]]; then log "[dry-run] would notify: $*"; return 0; fi
-    [[ -x "$NOTIFY" ]] && "$NOTIFY" "$@" || log "notify: $*"
+    if [[ -x "$NOTIFY" ]]; then
+        "$NOTIFY" "$@" || log "notify helper failed: $*"
+    else
+        log "notify: $*"
+    fi
 }
 
 have()   { command -v "$1" >/dev/null 2>&1; }
@@ -81,8 +85,26 @@ write_status() {
 }
 
 [[ $EUID -eq 0 || "$DRY_RUN" -eq 1 ]] || { echo "must run as root" >&2; exit 1; }
-# shellcheck source=/dev/null
-[[ -r "$CONFIG" ]] && source "$CONFIG"
+
+# Config is sourced as bash => arbitrary code runs as root. Refuse to source it
+# unless it is owned by root and not writable by group/other, so a non-root user
+# cannot inject commands into the privileged run.
+safe_to_source() {
+    local f="$1" owner perm
+    owner="$(stat -c '%u' "$f" 2>/dev/null)" || return 1
+    perm="$(stat -c '%a' "$f" 2>/dev/null)" || return 1
+    [[ "$owner" == "0" ]] || return 1
+    # last two octal digits = group/other; any write bit (2) => unsafe.
+    (( (0${perm} & 022) == 0 ))
+}
+if [[ -r "$CONFIG" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]] || safe_to_source "$CONFIG"; then
+        # shellcheck source=/dev/null
+        source "$CONFIG"
+    else
+        log "refusing to source $CONFIG: must be root-owned and not group/world-writable; using defaults"
+    fi
+fi
 
 # ---- 0. pacman lock -------------------------------------------------------
 # If a transaction is already in progress (manual upgrade, another hook),
@@ -117,15 +139,28 @@ count=${#pending_pkgs[@]}
 log "$count pending update(s)"
 
 # ---- 2. security tagging (arch-audit) -------------------------------------
+# arch-audit reports ALL installed vulnerable packages with an available fix,
+# not just the ones pending in this run. Intersect with pending_pkgs so the
+# count reflects "pending updates that carry a CVE fix".
 sec_note=""
 if [[ "$AUDIT" -eq 1 ]] && have arch-audit; then
     set +e
     vuln="$(arch-audit -uq 2>/dev/null)"
     set -e
     if [[ -n "$vuln" ]]; then
-        vuln_count=$(wc -l <<<"$vuln")
-        sec_note=" (${vuln_count} with known CVE)"
-        log "arch-audit: ${vuln_count} vulnerable package(s) pending"
+        # arch-audit -q may emit "pkg>=fixed-ver"; keep the name only.
+        declare -A pending_set=()
+        for p in "${pending_pkgs[@]}"; do pending_set["$p"]=1; done
+        vuln_pending=()
+        while read -r vline; do
+            [[ -n "$vline" ]] || continue
+            vname="${vline%%>*}"; vname="${vname%%<*}"; vname="${vname%%=*}"
+            [[ -n "${pending_set[$vname]:-}" ]] && vuln_pending+=("$vname")
+        done <<<"$vuln"
+        if [[ ${#vuln_pending[@]} -gt 0 ]]; then
+            sec_note=" (${#vuln_pending[@]} pending with known CVE)"
+            log "arch-audit: ${#vuln_pending[@]} pending package(s) carry a CVE fix: ${vuln_pending[*]}"
+        fi
     fi
 fi
 
@@ -176,6 +211,12 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 log "gates clear — running full upgrade"
+# Snapshot pre-existing .pacnew files so post-run we report only NEW ones,
+# not stale pacnew left unmerged from earlier upgrades.
+declare -A pacnew_before=()
+while read -r f; do [[ -n "$f" ]] && pacnew_before["$f"]=1; done \
+    < <(find /etc -name '*.pacnew' 2>/dev/null)
+
 set +e
 pacman -Syu --noconfirm "${PACMAN_ARGS[@]}"
 up_rc=$?
@@ -191,11 +232,17 @@ fi
 log "upgrade OK"
 
 # ---- 6. post: .pacnew -----------------------------------------------------
-mapfile -t pacnew < <(find /etc -name '*.pacnew' 2>/dev/null)
+# Report only .pacnew files created by THIS run (not pre-existing stale ones).
+pacnew=()
+while read -r f; do
+    [[ -n "$f" ]] || continue
+    [[ -n "${pacnew_before[$f]:-}" ]] && continue
+    pacnew+=("$f")
+done < <(find /etc -name '*.pacnew' 2>/dev/null)
 pacnew_note=""
 if [[ ${#pacnew[@]} -gt 0 ]]; then
-    pacnew_note=" ${#pacnew[@]} .pacnew file(s) need merging."
-    log ".pacnew files present: ${pacnew[*]}"
+    pacnew_note=" ${#pacnew[@]} new .pacnew file(s) need merging."
+    log "new .pacnew files: ${pacnew[*]}"
 fi
 
 # ---- 7. post: reboot recommendation ---------------------------------------
@@ -203,7 +250,9 @@ reboot_note=""
 if [[ "$REBOOT_POLICY" != never ]]; then
     for pkg in "${pending_pkgs[@]}"; do
         for trig in "${REBOOT_TRIGGERS[@]}"; do
-            if [[ "$pkg" == "$trig" ]]; then
+            # shellcheck disable=SC2053
+            # glob match, consistent with BLACKLIST (e.g. linux-* / nvidia*).
+            if [[ "$pkg" == $trig ]]; then
                 reboot_note=" Reboot recommended (${pkg} updated)."
                 break 2
             fi

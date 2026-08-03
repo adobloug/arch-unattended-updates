@@ -17,18 +17,32 @@ sent=0
 while read -r sid; do
     [[ -n "$sid" ]] || continue
 
-    # loginctl show-session gives Type, State, Name (user), User (uid)
-    eval "$(loginctl show-session "$sid" \
-        -p Type -p State -p Name -p User 2>/dev/null \
-        | sed 's/^/S_/')" || continue
+    # Parse loginctl output into locals WITHOUT eval — the username (Name) is
+    # attacker-influenceable in principle and must never reach the shell as code.
+    s_type="" s_state="" s_name="" s_user=""
+    while IFS='=' read -r key val; do
+        case "$key" in
+            Type)  s_type="$val" ;;
+            State) s_state="$val" ;;
+            Name)  s_name="$val" ;;
+            User)  s_user="$val" ;;
+        esac
+    done < <(loginctl show-session "$sid" \
+        -p Type -p State -p Name -p User 2>/dev/null)
 
-    case "${S_Type:-}" in
+    case "$s_type" in
         x11|wayland) ;;
         *) continue ;;
     esac
 
-    uid="${S_User:-}"
-    user="${S_Name:-}"
+    # Only notify live sessions; skip closing/lingering ones.
+    case "$s_state" in
+        active|online) ;;
+        *) continue ;;
+    esac
+
+    uid="$s_user"
+    user="$s_name"
     [[ -n "$uid" && -n "$user" ]] || continue
 
     bus="/run/user/${uid}/bus"

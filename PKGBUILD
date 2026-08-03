@@ -5,7 +5,7 @@
 # Regenerate .SRCINFO after any change:
 #   makepkg --printsrcinfo > .SRCINFO
 pkgname=arch-unattended-updates
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Gated unattended full-system upgrades for Arch (checkupdates + gates + notify)"
 arch=('any')
@@ -21,7 +21,9 @@ optdepends=(
 backup=('etc/arch-unattended/config')
 install="${pkgname}.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('b3aa0e2e7820e070c2b2d23bcc4492cfa3ac2a102905a7f0c17a74e2e90712a8')
+# TODO(v0.1.1): after pushing the v0.1.1 tag, run `updpkgsums` to pin the real
+# digest, then `makepkg --printsrcinfo > .SRCINFO`. 'SKIP' MUST NOT ship to AUR.
+sha256sums=('SKIP')
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
