@@ -8,6 +8,27 @@ security-only repository**. So this tool does not (and cannot safely) patch
 `pacman -Syu`** — but only when it is safe to do so unattended — and otherwise
 **holds the whole transaction** and pings you for manual review.
 
+## Why this exists
+
+If you come from Debian, you probably ran `unattended-upgrades` with a broad
+`Origins-Pattern` (`label=Debian`, or even `o=*`) so *everything* got patched
+automatically. Arch has no equivalent knob: there is no security-only repo and
+partial upgrades are unsupported, so "auto-patch some of it" is not an option —
+the only safe automatic action is a full `pacman -Syu`.
+
+This tool provides that, with guardrails suited to a rolling release:
+
+| Debian `unattended-upgrades` | Here |
+|------------------------------|------|
+| `Origins-Pattern` (which repos) | always the full official-repo `pacman -Syu` |
+| `Package-Blacklist` | `BLACKLIST` (a match holds the *whole* upgrade) |
+| — | Arch-news gate (`informant`) before upgrading |
+| — | `snapper` + `snap-pac` snapshot for one-command rollback |
+
+**AUR is out of scope.** Debian `o=*` would also pull third-party repos; the
+Arch analog is the AUR, which means building unreviewed PKGBUILDs. That is not
+safe to automate, so AUR packages stay manual (`yay -Syu` yourself).
+
 ## What it does
 
 On a daily timer, as root:
